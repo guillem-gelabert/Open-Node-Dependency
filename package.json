@@ -1,5 +1,7 @@
 {
   "name": "open-node-dependency",
+  "publisher": "ggs",
+  "repository": "github:guillem/Open-Node-Dependency",
   "displayName": "Open Node Dependency",
   "description": "Navigate to the package.json of a dependency in node_modules",
   "version": "0.0.1",

@@ -1,6 +1,6 @@
 # Open Node Dependency
 
-A VS Code/Cursor extension that enables cmd+click (or ctrl+click) navigation on dependency names in `package.json` files to open the corresponding `package.json` in `node_modules`. Useful when debugging version missmatches or writting patches for third party modules.
+A VS Code/Cursor extension that enables Cmd+click (or Ctrl+click) navigation on dependency names in `package.json` files to open the corresponding `package.json` in `node_modules`. Useful when debugging version mismatches or writing patches for third-party modules.
 
 ## Features
 
@@ -33,17 +33,25 @@ A VS Code/Cursor extension that enables cmd+click (or ctrl+click) navigation on 
 
 ## Requirements
 
-- VS Code 1.74.0 or higher
+- VS Code 1.105.0 or higher
 - Node.js project with `node_modules` directory
 
 ## How It Works
 
-The extension registers a `DocumentLinkProvider` for `package.json` files. When you open a `package.json`, it:
+The extension registers a `DefinitionProvider` for `package.json` files. When you Cmd+hover over a dependency name, it:
 
-1. Parses the JSON to extract dependency names
-2. Finds the text positions of each dependency name
-3. Creates clickable links pointing to `node_modules/{package}/package.json`
-4. Only creates links for packages that actually exist in `node_modules`
+1. Parses the JSON using `jsonc-parser` to build an AST with source positions
+2. Checks if the cursor is within a dependency key
+3. Returns a location pointing to `node_modules/{package}/package.json`
+4. Only provides navigation for packages that actually exist in `node_modules`
+
+## Known Limitations
+
+### Partial Underline on Hyphenated Packages
+
+When hovering over packages with hyphens (e.g., `jsonc-parser`) or scoped packages (e.g., `@types/node`), VS Code only underlines the word segment under the cursor, not the full package name.
+
+This is a VS Code limitation: the editor uses word boundaries for the hover highlight, and characters like `-`, `/`, and `@` are treated as word separators. **The navigation still works correctly** — clicking anywhere within the package name will open the correct file.
 
 ## Development
 
