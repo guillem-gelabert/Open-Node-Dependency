@@ -1,121 +1,87 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
-
-let enabled = true;
+import { parseTree, findNodeAtLocation } from "jsonc-parser";
 
 export function activate(context: vscode.ExtensionContext) {
-  const linkProvider = new PackageJsonLinkProvider();
+  const provider = new PackageJsonDefinitionProvider();
 
-  // Toggle command
-  const toggleCommand = vscode.commands.registerCommand(
-    "open-node-dependency.toggle",
-    () => {
-      enabled = !enabled;
-      linkProvider.setEnabled(enabled);
-      vscode.window.showInformationMessage(
-        `Package.json navigation: ${enabled ? "enabled" : "disabled"}`
-      );
-    }
-  );
-  context.subscriptions.push(toggleCommand);
-
-  // Document link provider for package.json dependencies
-  const linkProviderDisposable = vscode.languages.registerDocumentLinkProvider(
+  const disposable = vscode.languages.registerDefinitionProvider(
     { language: "json", pattern: "**/package.json" },
-    linkProvider
+    provider
   );
-  context.subscriptions.push(linkProviderDisposable);
+  context.subscriptions.push(disposable);
 }
 
-class PackageJsonLinkProvider implements vscode.DocumentLinkProvider {
-  private enabled = true;
+class PackageJsonDefinitionProvider implements vscode.DefinitionProvider {
+  private static readonly DEP_SECTIONS = [
+    "dependencies",
+    "devDependencies",
+    "peerDependencies",
+    "optionalDependencies",
+  ];
 
-  setEnabled(value: boolean) {
-    this.enabled = value;
-  }
-
-  provideDocumentLinks(document: vscode.TextDocument): vscode.DocumentLink[] {
-    if (!this.enabled || !document.fileName.endsWith("package.json")) {
-      return [];
-    }
-
-    const text = document.getText();
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-
-    if (!workspaceFolder) {
-      return [];
-    }
-
-    try {
-      const packageJson = JSON.parse(text);
-      const depSections = [
-        "dependencies",
-        "devDependencies",
-        "peerDependencies",
-        "optionalDependencies",
-      ];
-
-      const links: vscode.DocumentLink[] = [];
-
-      for (const section of depSections) {
-        if (packageJson[section] && typeof packageJson[section] === "object") {
-          for (const depName of Object.keys(packageJson[section])) {
-            const link = this.createLinkForDependency(
-              document,
-              text,
-              depName,
-              section,
-              workspaceFolder.uri.fsPath
-            );
-            if (link) {
-              links.push(link);
-            }
-          }
-        }
-      }
-
-      return links;
-    } catch {
-      // Invalid JSON, ignore
-      return [];
-    }
-  }
-
-  private createLinkForDependency(
+  provideDefinition(
     document: vscode.TextDocument,
-    text: string,
-    depName: string,
-    section: string,
-    workspacePath: string
-  ): vscode.DocumentLink | null {
-    // Check if package exists in node_modules
-    const packageJsonPath = path.join(workspacePath, "node_modules", depName, "package.json");
-    if (!fs.existsSync(packageJsonPath)) {
+    position: vscode.Position
+  ): vscode.Location | null {
+    if (!document.fileName.endsWith("package.json")) {
       return null;
     }
 
-    // Find section start
-    const sectionRegex = new RegExp(`"${this.escapeRegex(section)}"\\s*:\\s*\\{`);
-    const sectionMatch = sectionRegex.exec(text);
-    if (!sectionMatch) return null;
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+    if (!workspaceFolder) {
+      return null;
+    }
 
-    // Find dependency within section
-    const depRegex = new RegExp(`"${this.escapeRegex(depName)}"\\s*:`);
-    const searchText = text.slice(sectionMatch.index);
-    const depMatch = depRegex.exec(searchText);
-    if (!depMatch) return null;
+    const text = document.getText();
+    const tree = parseTree(text);
+    if (!tree) {
+      return null;
+    }
 
-    const absoluteIndex = sectionMatch.index + depMatch.index;
-    const startPos = document.positionAt(absoluteIndex + 1); // skip opening quote
-    const endPos = document.positionAt(absoluteIndex + 1 + depName.length);
-    const range = new vscode.Range(startPos, endPos);
+    // Distance in characters from prosition 0:0
+    const offset = document.offsetAt(position);
 
-    const targetUri = vscode.Uri.file(packageJsonPath);
-    return new vscode.DocumentLink(range, targetUri);
-  }
+    // Traverse the AST
+    for (const section of PackageJsonDefinitionProvider.DEP_SECTIONS) {
+      const sectionNode = findNodeAtLocation(tree, [section]);
+      if (!sectionNode || sectionNode.type !== "object" || !sectionNode.children) {
+        continue;
+      }
 
-  private escapeRegex(str: string): string {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      // The children of DEP_SECTIONS should all be dependencies
+      for (const entry of sectionNode.children) {
+        // keyNode is the dependency name
+        const keyNode = entry.children?.[0];
+        // const versionNode = entry.children?.[1];
+        if (!keyNode || keyNode.type !== "string") {
+          continue;
+        }
+
+        /*
+        * "lodash": "^4.17.21"
+        * ^      ^
+        * |      |
+        * |      keyNode.offset + keyNode.length (end, exclusive)
+        * keyNode.offset (start, inclusive)
+        */
+        if (offset >= keyNode.offset && offset < keyNode.offset + keyNode.length) {
+          const depName = keyNode.value as string;
+          const packageJsonPath = path.join(
+            workspaceFolder.uri.fsPath,
+            "node_modules",
+            depName,
+            "package.json"
+          );
+
+          if (fs.existsSync(packageJsonPath)) {
+            return new vscode.Location(vscode.Uri.file(packageJsonPath), new vscode.Position(0, 0));
+          }
+        }
+      }
+    }
+
+    return null;
   }
 }
