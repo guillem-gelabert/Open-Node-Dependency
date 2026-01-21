@@ -17,19 +17,25 @@ A VS Code/Cursor extension that enables Cmd+click (or Ctrl+click) navigation on 
 
 ## Installation
 
+### From Marketplace (Recommended)
+
+Install directly from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=ggs.open-node-dependency):
+
+1. Open VS Code
+2. Press `Ctrl+P` (or `Cmd+P` on Mac) to open Quick Open
+3. Paste: `ext install ggs.open-node-dependency`
+4. Press Enter
+
+Or search for "Open Node Dependency" in the Extensions view (`Ctrl+Shift+X`).
+
 ### From Source
 
+For development or contributing:
+
 1. Clone this repository
-2. Run `npm install` to install dependencies
-3. Run `npm run compile` to build the extension
-4. Press F5 in VS Code to open a new Extension Development Host window
-5. Open a `package.json` file and test the cmd+click functionality
-
-### Package for Distribution
-
-1. Install `vsce`: `npm install -g @vscode/vsce`
-2. Run `vsce package` to create a `.vsix` file
-3. Install the `.vsix` file via `code --install-extension open-node-dependency-0.0.1.vsix`
+2. Run `npm install`
+3. Run `npm run compile`
+4. Press F5 to launch the Extension Development Host
 
 ## Requirements
 
